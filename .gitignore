@@ -4,3 +4,11 @@ node_modules/
 __pycache__/
 *.wav
 demo/
+logs/
+# Runtime database and its journal/WAL files (schema.sql stays tracked)
+db/*.sqlite3
+db/*.sqlite3-*
+# Model artefacts kept only as local rollback copies
+*.bak_sklearn13
+# Evaluation datasets are downloaded, not committed
+*.parquet

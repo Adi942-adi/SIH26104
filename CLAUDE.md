@@ -11,7 +11,7 @@ Synthetic-voice detection for enterprise telephony. Live call audio → fused ri
 ## Pipeline
 **Primary input today: `file_feeder.py`** (ffmpeg-transcoded WAV streamed in real time). AudioSocket/Asterisk is a later, optional block — both feed the identical callback interface, so the scorer never knows which source it's reading.
 
-Asterisk (G.711 µ-law) → AudioSocket TCP :9092 → ring buffer (1 s window / 0.5 s hop) → **upsample 8→16 kHz** → three layers → fusion → context rules → EMA smoothing → thresholds → WebSocket → dashboard + approval UI.
+Asterisk (G.711 µ-law) → AudioSocket TCP :9092 → ring buffer (4 s window / 0.5 s hop) → **upsample 8→16 kHz** → three layers → fusion → context rules → EMA smoothing → thresholds → WebSocket → dashboard + approval UI. Browser `/ws/live` ingests 16 kHz directly, so only the 8 kHz sources need the upsample.
 
 | Layer | Model | Fusion weight |
 |---|---|---|
@@ -39,6 +39,7 @@ Asterisk (G.711 µ-law) → AudioSocket TCP :9092 → ring buffer (1 s window / 
 2. **Light theme only.** No dark mode, no toggle, no `prefers-color-scheme`.
 3. Fusion weights are module-level constants. Never learn, fit, or auto-tune them.
 4. No auth, multi-tenancy, Docker, cloud, or abstraction layers. Direct code.
+4b. **Never run git commands.** No init, no add, no commit, no branch. I handle version control myself.
 5. No dependencies outside `Tech-Stack.md` without asking.
 6. Ask one question if ambiguous. Do not guess and build.
 7. Do not refactor code you weren't asked to touch.
@@ -46,12 +47,11 @@ Asterisk (G.711 µ-law) → AudioSocket TCP :9092 → ring buffer (1 s window / 
 ## MCP policy for this project
 
 **Use freely:**
-- **Context7** — before writing any SpeechBrain, parselmouth, torchaudio, librosa, FastAPI or wavesurfer.js code, pull current docs. This is the single highest-value tool here; these libraries are exactly where APIs get hallucinated.
+- **Context7** — before writing any SpeechBrain, parselmouth, torchaudio, librosa, Flask or wavesurfer.js code, pull current docs. This is the single highest-value tool here; these libraries are exactly where APIs get hallucinated.
 - **Playwright** — verify UI behaviour, not just that it renders. "Does the approve button lock when state becomes ESCALATE" is a Playwright assertion, not an eyeball check.
-- **GitHub** — commits and repo ops.
 - **Postman** — exercise the REST endpoints and the WebSocket once `api.py` exists.
 
-- **Supabase** — hosted Postgres + realtime. Score points, sessions and transaction state live here; both UIs subscribe to realtime channels instead of a hand-built WebSocket fan-out.
+- **Supabase** — legacy optional async flush only (`ENABLE_LEGACY_SUPABASE_FLUSH=true`). SQLite (`db/voiceclone.sqlite3`) is the primary store; the live score line uses the local WebSocket.
 
 **Do not use on this project:**
 - **Sentry** — no error-tracking service in a 48-hour local build.

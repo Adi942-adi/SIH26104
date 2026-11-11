@@ -20,7 +20,7 @@ A detection service inside the telephony path. Live call audio streams in; a fus
 - Monitoring dashboard + transaction approval surface
 - Two thresholds: escalate, block
 - Feature-only logging, no audio retention
-- REST + OpenAPI integration surface
+- REST + WebSocket integration surface (Flask; no OpenAPI page)
 - Four honest evaluations, including cross-method and codec-degraded
 
 ## Explicitly out of scope

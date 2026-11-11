@@ -1,0 +1,22 @@
+# Runtime dependencies (service/)
+Flask>=3.1,<4
+flask-sock>=0.7,<1
+numpy>=1.26
+python-dotenv>=1.0
+torch>=2.0
+# 2.11.0 fails to load its compiled extension against torch 2.14; 2.11.1 works.
+torchaudio>=2.11.1
+scipy>=1.11
+soundfile>=0.12
+speechbrain>=1.0
+praat-parselmouth>=0.4
+supabase>=2.0
+
+# ASVspoof evaluation harness (eval/)
+pyarrow>=15
+pandas>=2.0
+scikit-learn>=1.9,<2
+
+# Secondary detector: MFCC-SVM (WaliMuhammadAhmad/AIVoice-Detection)
+librosa>=0.10
+joblib>=1.3

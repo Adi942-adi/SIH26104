@@ -1,57 +1,82 @@
-# Database Schema — Supabase Postgres
+# Database Schema — SQLite
 
-Hosted Supabase. Realtime enabled on `score_point` and `transaction_demo` so the dashboard and approval UI subscribe directly instead of us building WebSocket fan-out.
-
-Project ref: `hdwivjtrzuymjwxggvsf`
+Local file `db/voiceclone.sqlite3`, created and migrated by `service/api.py` on startup. Only derived scores are stored — raw audio is never written (CLAUDE.md hard rule 1). The dashboard reads it through the REST endpoints; there are no database realtime subscriptions.
 
 ## Tables
 
-### `call_session`
+### `calls`
 | Column | Type | Note |
 |---|---|---|
-| call_id | text PK | AudioSocket UUID or feeder-generated |
-| started_at | timestamptz default now() | |
-| ended_at | timestamptz null | |
-| codec | text | `ulaw` / `gsm` |
-| origin_number | text | drives context rules |
-| enrolled_speaker | text null | |
-| final_state | text | `OK` / `ESCALATE` / `BLOCK` |
+| id | INTEGER PK AUTOINCREMENT | |
+| external_ref | VARCHAR(128) | AudioSocket UUID, feeder/scorer call_id, or upload name |
+| source_type | VARCHAR(20) NOT NULL | `upload` / `stream` / `live` |
+| started_at | TIMESTAMP default CURRENT_TIMESTAMP | |
+| ended_at | TIMESTAMP null | |
+| status | VARCHAR(20) default `in_progress` | `in_progress` / `completed` / `failed` / `ended` |
+| language | VARCHAR(20) null | `demo` marks `/demo` streams |
 
-### `score_point` — **realtime on**
+### `audio_chunks`
+One row per scored window (derived scores only, never audio).
+
 | Column | Type |
 |---|---|
-| id | bigserial PK |
-| call_id | text FK → call_session |
-| t | real (seconds since call start) |
-| score | real (fused) |
-| acoustic, prosody, speaker | real |
-| context_flags | jsonb default '[]' |
-| state | text |
+| id | INTEGER PK AUTOINCREMENT |
+| call_id | INTEGER FK → calls(id) ON DELETE CASCADE |
+| chunk_index | INTEGER |
+| start_ms, end_ms | INTEGER |
+| raw_score | FLOAT |
+| acoustic, prosody, speaker | FLOAT default 0.0 |
+| created_at | TIMESTAMP default CURRENT_TIMESTAMP |
 
-Index on `(call_id, t)`.
+Index: `idx_audio_chunks_call_id (call_id)`.
 
-### `threshold_event` — **realtime on**
+### `risk_scores`
+| Column | Type | Note |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| call_id | INTEGER FK → calls(id) ON DELETE CASCADE | |
+| risk_score | FLOAT | fused 0–1 score |
+| confidence_tier | VARCHAR(10) | `low` / `medium` / `high` |
+| computed_at | TIMESTAMP default CURRENT_TIMESTAMP | |
+
+Index: `idx_risk_scores_call_id (call_id)`.
+
+### `alerts`
+| Column | Type | Note |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| call_id | INTEGER FK → calls(id) ON DELETE CASCADE | |
+| risk_score_id | INTEGER FK → risk_scores(id) | |
+| severity | VARCHAR(10) | `flag` (medium) / `block` (high) |
+| message | TEXT | |
+| raised_at | TIMESTAMP default CURRENT_TIMESTAMP | |
+| acknowledged | BOOLEAN default 0 | |
+| acknowledged_by, acknowledged_at | VARCHAR(100), TIMESTAMP | |
+
+Index: `idx_alerts_call_ack (call_id, acknowledged)`.
+
+### `case_reviews`
 | Column | Type |
 |---|---|
-| id | bigserial PK |
-| call_id | text FK |
-| t | real |
-| from_state, to_state | text |
-| flags | jsonb |
+| id | INTEGER PK AUTOINCREMENT |
+| call_id | INTEGER FK → calls(id) ON DELETE CASCADE |
+| reviewer | VARCHAR(100) |
+| decision | VARCHAR(30) |
+| notes | TEXT |
+| reviewed_at | TIMESTAMP default CURRENT_TIMESTAMP |
 
-### `transaction_demo` — **realtime on**
-| Column | Type |
-|---|---|
-| txn_id | text PK |
-| call_id | text FK |
-| amount | bigint |
-| state | text — `PENDING` / `APPROVED` / `HELD` |
-| locked_at | real null |
+### `speaker_references`
+| Column | Type | Note |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| speaker | VARCHAR(100) | |
+| embedding | BLOB | 192 float32 values; audio is never stored |
+| enrolled_at | TIMESTAMP default CURRENT_TIMESTAMP | |
 
-## RLS
-Disable RLS on all four tables for the hackathon, or use a single permissive policy. Auth is out of scope and RLS misconfiguration is a classic way to lose two hours to silent empty result sets.
+The most recent row is restored on startup so enrolment survives a restart.
 
 ## Write pattern — this matters for latency
-The scorer emits every 0.5 s. **Do not insert one row per emission over the network in the demo path.** Buffer locally and flush every ~2 s, or insert asynchronously so a slow network never stalls the scorer loop.
+Scorer messages are buffered in memory and flushed by one background thread every 1 s (`SQLITE_FLUSH_SECONDS`). Each flush opens a short-lived connection and closes it in a `finally` block, so scoring never blocks on disk I/O and file handles do not leak.
 
-The **local WebSocket stays the primary path for the live score line** — it is what the time-to-detection number depends on, and it must not be hostage to venue wifi. Supabase carries persistence, the call log, and the approval UI state. If the network dies on stage, the score line keeps moving.
+## Legacy Supabase
+If `ENABLE_LEGACY_SUPABASE_FLUSH=true` and credentials are present, score points are also buffered and flushed asynchronously every 2 s (`PG_FLUSH_SECONDS`). Off by default; SQLite is the source of truth for the demo, and no write path is allowed to stall the scorer loop.

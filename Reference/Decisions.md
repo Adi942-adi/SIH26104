@@ -45,3 +45,7 @@ AudioSocket normalises to fixed 8 kHz slin16 regardless of negotiated codec; Cha
 **D10 — Report cross-method and codec-degraded numbers on the main slide.**
 Every other team will show one flattering figure. The gap is our credibility.
 *Cost:* our headline number looks worse. That is the point.
+
+**D12 — SQLite is the primary store; Supabase is legacy-optional.** *(Reverses D11.)*
+The demo must survive a dead venue network. Persistence now uses a local SQLite file (`db/voiceclone.sqlite3`) written by a single buffered flush thread; the dashboard reads it through REST. The old Supabase flush remains available behind `ENABLE_LEGACY_SUPABASE_FLUSH=true` but is off by default and is never on the critical path.
+*Cost:* no hosted realtime subscriptions; the local WebSocket + REST polling carry the live view. Acceptable for a single-machine demo.
